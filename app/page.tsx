@@ -100,12 +100,32 @@ export default function Home() {
         description: orderData.isWaitlisted ? "Waitlist Registration" : "Seat Reservation",
         order_id: orderData.orderId,
         handler: async function (response: any) {
-          // This block fires automatically when payment succeeds!
-          console.log("Razorpay Response:", response);
-          alert(`🎉 Booking successful!\nPayment ID: ${response.razorpay_payment_id}\nOrder ID: ${response.razorpay_order_id}`);
-          
-          // Refresh the page or redirect to clean up states
-          window.location.reload();
+          try {
+            // Send the response data to our new verification endpoint
+            const verifyRes = await fetch('/api/verify-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              })
+            });
+
+            const verifyData = await verifyRes.json();
+
+            if (verifyData.success) {
+               alert(`🎉 Booking confirmed and secured!\nPayment ID: ${response.razorpay_payment_id}`);
+               window.location.reload(); // Refresh to update slot counts
+            } else {
+               alert(`Verification failed: ${verifyData.error}`);
+               setIsLoading(false);
+            }
+          } catch (err) {
+             console.error("Verification fetch error:", err);
+             alert("Error verifying payment with server.");
+             setIsLoading(false);
+          }
         },
         prefill: {
           name: formData.name,
