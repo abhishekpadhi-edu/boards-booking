@@ -1,5 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase Client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function Home() {
   // Form State
@@ -7,13 +13,44 @@ export default function Home() {
     name: '',
     whatsapp: '',
     slots: 1,
-    session: 'Saturday, May 30 - 4:00 PM'
+    session: ''
   });
 
-  // Dynamic slot tracking (Simulated for frontend setup)
-  const [availableSlots, setAvailableSlots] = useState(12);
-  const totalSlots = 16;
-  const slotPrice = 250; // ₹250 per slot
+  // Dynamic state from Supabase
+  const [availableSlots, setAvailableSlots] = useState(0);
+  const [totalSlots, setTotalSlots] = useState(16);
+  const [slotPrice, setSlotPrice] = useState(250);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch session data on load
+  useEffect(() => {
+    async function fetchSession() {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (data) {
+        setTotalSlots(data.total_slots);
+        // Calculate remaining slots
+        setAvailableSlots(data.total_slots - data.slots_booked);
+        // Convert the paise price back to rupees for the UI display
+        setSlotPrice(data.slot_price / 100); 
+        // Auto-select the session title
+        setFormData(prev => ({ ...prev, session: data.title }));
+      }
+      setIsLoading(false);
+    }
+    
+    fetchSession();
+
+    // Inject Razorpay script
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
 
   // Handlers to increment/decrement slots
   const adjustSlots = (amount: number) => {
@@ -30,20 +67,13 @@ export default function Home() {
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // This is where we will trigger the backend order creation later.
-    // For now, it alerts the user with their summary.
     const orderTotal = formData.slots * slotPrice;
     alert(`Initiating booking for ${formData.name}.\nSlots: ${formData.slots}\nTotal Amount: ₹${orderTotal}`);
   };
 
-  // Injecting the Razorpay Checkout Script dynamically
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+  if (isLoading) {
+    return <div className="min-h-screen bg-[#E5B9BA] flex items-center justify-center font-serif text-[#4A2F2D] text-xl font-bold">Loading session data...</div>;
+  }
 
   return (
     <main className="min-h-screen bg-[#E5B9BA] flex flex-col items-center justify-between p-4 md:p-8 font-serif text-[#4A2F2D]">
@@ -65,7 +95,7 @@ export default function Home() {
         </h2>
 
         <form onSubmit={handleBookingSubmit} className="space-y-5">
-          {/* Session Dropdown */}
+          {/* Session Dropdown (Now populated dynamically) */}
           <div>
             <label className="block text-xs font-sans font-bold uppercase tracking-wider mb-1">Select Session</label>
             <select 
@@ -74,8 +104,7 @@ export default function Home() {
               onChange={handleInputChange}
               className="w-full bg-[#FDF3E7] border border-[#4A2F2D] rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#4A2F2D] text-sm"
             >
-              <option>Saturday, May 30 - 4:00 PM (Lords of Waterdeep Night)</option>
-              <option>Sunday, May 31 - 2:00 PM (Root Strategy Session)</option>
+              <option value={formData.session}>{formData.session}</option>
             </select>
           </div>
 
