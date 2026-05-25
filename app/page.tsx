@@ -67,8 +67,75 @@ export default function Home() {
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const orderTotal = formData.slots * slotPrice;
-    alert(`Initiating booking for ${formData.name}.\nSlots: ${formData.slots}\nTotal Amount: ₹${orderTotal}`);
+    setIsLoading(true); // Reuse your loading state to disable double clicks
+
+    try {
+      // 1. Call your backend API route to register the intent and get an Order ID
+      const orderResponse = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          whatsapp: formData.whatsapp,
+          slots: formData.slots,
+          sessionTitle: formData.session,
+          slotPrice: slotPrice // Sent as standard rupees (e.g., 250); backend converts to paise
+        })
+      });
+
+      const orderData = await orderResponse.json();
+
+      if (orderData.error) {
+        alert(`Order Creation Failed: ${orderData.error}`);
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Configure the Razorpay Checkout Options
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_TEST_KEY_ID, 
+        amount: orderData.amount, // Amount returned by backend in paise
+        currency: "INR",
+        name: "Boards of Bhubaneswar",
+        description: orderData.isWaitlisted ? "Waitlist Registration" : "Seat Reservation",
+        order_id: orderData.orderId,
+        handler: async function (response: any) {
+          // This block fires automatically when payment succeeds!
+          console.log("Razorpay Response:", response);
+          alert(`🎉 Booking successful!\nPayment ID: ${response.razorpay_payment_id}\nOrder ID: ${response.razorpay_order_id}`);
+          
+          // Refresh the page or redirect to clean up states
+          window.location.reload();
+        },
+        prefill: {
+          name: formData.name,
+          contact: formData.whatsapp,
+        },
+        theme: {
+          color: "#4A2F2D", // Matches your beautiful brown theme brand color
+        },
+        modal: {
+          ondismiss: function() {
+            setIsLoading(false);
+          }
+        }
+      };
+
+      // 3. Open the secure checkout iframe
+      const paymentObject = new (window as any).Razorpay(options);
+      
+      paymentObject.on('payment.failed', function (response: any) {
+        alert(`Payment Failed: ${response.error.description}`);
+        setIsLoading(false);
+      });
+      
+      paymentObject.open();
+      
+    } catch (error) {
+      console.error("Checkout handling error:", error);
+      alert("Something went wrong loading the payment gateway window.");
+      setIsLoading(false);
+    }
   };
 
   if (isLoading) {
